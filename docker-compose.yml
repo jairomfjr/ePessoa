@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: epessoa-postgres
+    environment:
+      POSTGRES_DB: epessoa
+      POSTGRES_USER: epessoa_user
+      POSTGRES_PASSWORD: epessoa_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - epessoa-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U epessoa_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: epessoa-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/epessoa
+      DB_USERNAME: epessoa_user
+      DB_PASSWORD: epessoa_password
+      JWT_SECRET: dev-secret-key-for-jwt-token-generation-with-minimum-length-required-64-chars
+      GOVBR_CLIENT_ID: ${GOVBR_CLIENT_ID:-dev-client-id}
+      GOVBR_CLIENT_SECRET: ${GOVBR_CLIENT_SECRET:-dev-client-secret}
+      SWAGGER_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    networks:
+      - epessoa-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  epessoa-network:
+    driver: bridge
+
